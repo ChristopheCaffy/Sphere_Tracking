@@ -18,6 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(OpenCV REQUIRED COMPONENTS core imgproc highgui)
 
+find_package(PCL 1.2 REQUIRED)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -126,6 +128,8 @@ include_directories(
   ${OpenCV_INCLUDE_DIRS}
 )
 
+include_directories(${PCL_INCLUDE_DIRS})
+
 
 ## Declare a C++ library
 #add_library(${PROJECT_NAME}
@@ -177,6 +181,7 @@ target_link_libraries(image_publisher
 target_link_libraries(image_converter
    ${catkin_LIBRARIES}
    ${OpenCV_LIBRARIES}
+    ${PCL_LIBRARIES}
 )
 
 target_link_libraries(image_converter_RGB

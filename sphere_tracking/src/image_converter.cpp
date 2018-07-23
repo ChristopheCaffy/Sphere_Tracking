@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <cmath>
+#include <pcl/point_types.h>
 
 
 using namespace std;
@@ -22,6 +23,10 @@ class ImageConverter
 
 public:
   float min, max;
+  float cx;
+  float cy;
+  float fx;
+  float fy;
 
   ImageConverter()
     : it_(nh_)
@@ -35,6 +40,10 @@ public:
 
     min=0;
     max=1000000;
+    cx = 319.5; // center of projection
+    cy = 239.5; // center of projection
+    fx = 570.342224121093;//525.0;
+    fy = 570.3422241210938;// 525.0;//
 
     cv::namedWindow(OPENCV_WINDOW);
   }
@@ -42,6 +51,34 @@ public:
   ~ImageConverter()
   {
     cv::destroyWindow(OPENCV_WINDOW);
+  }
+
+  float dist2Point(float d1, int u1, int v1, float d2, int u2, int v2){
+    pcl::PointXYZRGB p1;
+    pcl::PointXYZRGB p2;
+    float x,y,z;
+    float dist;
+    /*x = ((u1 - cx)*d1)/fx;
+    y = (-1.0*(v1 - cy)*d1)/fy;
+    z = (-1.0*d1);*/
+    z = d1;
+    x = z*2.0*tan(fx/2.0)*(((float)u1-cx)/640.0);
+    y = z*2.0*tan(fy/2.0)*(((float)v1-cy)/480.0);
+    p1.x = x;
+    p1.y = y;
+    p1.z = z;
+    /*
+    x = ((u2 - cx)*d2)/fx;
+    y = (-1.0*(v2 - cy)*d2)/fy;
+    z = (-1.0*d2);*/
+    z = d2;
+    x = z*2*tan(fx/2)*((u2-cx)/640);
+    y = z*2*tan(fy/2)*((v2-cy)/480);
+    p2.x = x;
+    p2.y = y;
+    p2.z = z;
+    dist=sqrt(pow(p1.x-p2.x,2)+pow(p1.y-p2.y,2)+pow(p1.z-p2.z,2));
+    return dist;
   }
 
   void imageCb(const sensor_msgs::ImageConstPtr& msg)
@@ -81,7 +118,7 @@ public:
             }
         }
     }
-    ROS_INFO("%f",val);
+    //ROS_INFO("%f",val);
 
   //  cvtColor( src, src_gray, CV_BGR2GRAY );
     ImageConverter::findCircle(src_gray,msg,cv_ptr);
@@ -101,31 +138,38 @@ public:
       std::vector<cv::Vec3f> circles;
 
       /// Apply the Hough Transform to find the circles
-      HoughCircles( src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows/8, 100, 25, 0, 0 );
+      HoughCircles( src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows/8, 1, 17, 0, 0 );
       /// Draw the circles detected
       int diff;
+      float dist;
       /// Data file to save all circle datas+timestamp
       FILE* fichier = NULL;
       int numCircle1, numCircle2;
       /// Save the file in catkin_ws folder
       /// Remove the file or rename it in the folder if you want a new data file.
       fichier = fopen("test_depth.csv", "a+");
-      if(circles.size()>=2 && circles.size()<10){
+      if(circles.size()>=2){ //&& circles.size()<10){
           diff=1000000;
           /// find two circles in the circles array who have the smallest radius difference
           for( size_t i = 0; i < circles.size(); i++ )
           {
               for( size_t j = 0; j < circles.size(); j++ ){
                   if(i!=j){
-                      if(abs((cvRound(circles[i][2]))-(cvRound(circles[j][2])))<diff){
-                          diff=abs((cvRound(circles[i][2]))-(cvRound(circles[j][2])));
-                          numCircle1=i;
-                          numCircle2=j;
+                      dist=ImageConverter::dist2Point(cv_ptr->image.at<float>(cvRound(circles[i][0]),cvRound(circles[i][1])), cvRound(circles[i][0]), cvRound(circles[i][1]), cv_ptr->image.at<float>(cvRound(circles[j][0]),cvRound(circles[j][1])),  cvRound(circles[j][0]), cvRound(circles[j][1]));
+                      //ROS_INFO("dist1 : %f, u1 : %u, v1 : %u, dist2 : %f, u2 : %u, v2 : %u",cv_ptr->image.at<float>(cvRound(circles[i][0]),cvRound(circles[i][1])), cvRound(circles[i][0]), cvRound(circles[i][1]), cv_ptr->image.at<float>(cvRound(circles[j][0]),cvRound(circles[j][1])),  cvRound(circles[j][0]), cvRound(circles[j][1]));
+                      //ROS_INFO("%f   ",dist);
+                      if(dist>0.5 && dist<0.8 && !std::isnan(dist)){
+                        circle( src_gray, cv::Point(cvRound(circles[i][0]), cvRound(circles[i][1])), cvRound(circles[i][2]), cv::Scalar(255,255,255), 3, 8, 0 );
+                          if(abs((cvRound(circles[i][2]))-(cvRound(circles[j][2])))<diff){
+                              diff=abs((cvRound(circles[i][2]))-(cvRound(circles[j][2])));
+                              numCircle1=i;
+                              numCircle2=j;
+                          }
                       }
                   }
               }
            }
-          if(diff<3){
+          if(diff<10){
            fprintf(fichier, "%d;%d;", cvRound(circles[numCircle1][0]), cvRound(circles[numCircle1][1]));
            fprintf(fichier, "%d;%d", cvRound(circles[numCircle2][0]), cvRound(circles[numCircle2][1]));
            fprintf(fichier, ";%d", msg->header.stamp.nsec );
